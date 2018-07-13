@@ -1,0 +1,112 @@
+---
+title: "Output of sample preprocessing"
+output: html_document
+params:
+  tag : x
+---
+
+```{r, echo=FALSE}
+library( data.table )
+library( ggplot2 )
+library( gridExtra )
+source('~/local_analyses/functions_mutations/function_process.R')
+source( "~/local_analyses/functions_mutations/functions_plot.R" )
+```
+
+```{r, echo=FALSE}
+#### Analyzed sample
+print( params$tag )
+```
+
+```{r, echo=FALSE}
+data_path <- "~/data/DATA-1/MMB_MEF_WGS_signatureRatio/" 
+#tag <- "MNU-1"
+genome <- "mm10"
+annot_path <- paste0( "~/data/DATA-1/annotations/", genome, "/" )
+load( paste0( params$tag, "_dt_mut_annot.Rdata"  ) )
+```
+
+
+
+## All mutations
+
+```{r mutation nb}
+## Nb total mutations
+ dt_mut_annot[ , .N ]
+## Nb .mutations called by callers
+ dt_mut_annot[ , .N, by = c( "is_strelka", "is_mutect", "nb_caller" ) ]
+```
+
+#### Distribution of VAF
+```{r total VAF, echo=FALSE, warning=FALSE}
+ qplot( dt_mut_annot[ , VAF_T.M ], binwidth = 0.025, main = "VAF MuTect2 mutations" )
+ qplot( dt_mut_annot[ , VAF_T.S ], binwidth = 0.025, main = "VAF Strelka2 mutations" )
+```
+
+
+#### Distribution of Coverage
+
+```{r}
+### Mutect
+dt_mut_annot[ , quantile( Cov_N.M, probs = c( 0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 1 ), na.rm = T ) ]
+dt_mut_annot[ , quantile( Cov_T.M, probs = c( 0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 1 ), na.rm = T ) ]
+### Strelka
+dt_mut_annot[ , quantile( Cov_N.S, probs = c( 0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 1 ), na.rm = T ) ]
+dt_mut_annot[ , quantile( Cov_T.S, probs = c( 0, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 1 ), na.rm = T ) ]
+```
+
+
+```{r total Cov, echo=FALSE, warning=FALSE}
+ p1 <- qplot( dt_mut_annot[ Cov_N.M < 100, Cov_N.M ], binwidth = 5, main = "Coverage in N (by MuTect2)" )
+ p2 <- qplot( dt_mut_annot[ Cov_T.M < 100, Cov_T.M ], binwidth = 5, main = "Coverage in T (by MuTect2)" )
+ grid.arrange( p1, p2, ncol = 2 )
+ p1 <- qplot( dt_mut_annot[ Cov_N.S < 100, Cov_N.S ], binwidth = 5, main = "Coverage in N (by Strelka2)" )
+ p2 <- qplot( dt_mut_annot[ Cov_T.S < 100, Cov_T.S ], binwidth = 5, main = "Coverage in T (by Strelka2)" )
+ grid.arrange( p1, p2, ncol = 2 )
+```
+
+
+ #### Filtering
+ 
+
+Default filters (mouse): no rs number, not tandem repeat, VAF in N == 0.0 and Coverage (T & N) > 8
+
+```{r}
+## Nb total mutations
+ dt_mut_annot[ keep_mutation == 1, .N ]
+## Nb .mutations called by callers
+ dt_mut_annot[ keep_mutation == 1, .N, by = c( "is_strelka", "is_mutect", "nb_caller" ) ]
+```
+
+
+```{r, echo=FALSE, warning=FALSE}
+p1 <- ggplot( dt_mut_annot[ Cov_T.M < 500 ] ) + geom_point( aes( x = Cov_T.M, y = VAF_T.M, color = keep_mutation ), alpha = 0.5 ) + geom_vline(
+   aes( xintercept = 6 ), color = "grey" ) + geom_hline( aes( yintercept = 0.1 ), color = "grey" ) + labs( title = "Coverage vs. VAF + thresholds (Mutect2)" )  + guides( color=FALSE )
+ p2 <- ggplot( dt_mut_annot[ Cov_T.S < 500 ] ) + geom_point( aes( x = Cov_T.S, y = VAF_T.S, color = keep_mutation ), alpha = 0.5 ) + geom_vline(
+   aes( xintercept = 6 ), color = "grey" ) + geom_hline( aes( yintercept = 0.1 ), color = "grey" ) + labs( title = "Coverage vs. VAF + thresholds (Strelka2)" ) + guides( color=FALSE )
+ grid.arrange( p1, p2, ncol = 2 )
+```
+
+
+## Mutation spectra
+
+All mutations and after filtering:
+```{r, fig.width=10, fig.height=4, echo=FALSE, warning=FALSE}
+plot_spectra_easy(  get_tab96( dt_mut_annot ), val = "Percent", add_number = T ) + labs( title = "All mutations" )
+```
+
+
+```{r, fig.width=10, fig.height=4, echo=FALSE, warning=FALSE}
+plot_spectra_easy(  get_tab96( dt_mut_annot[ keep_mutation == 1 ] ), val = "Percent", add_number = T ) + labs( title = "Filtered out mutations" )
+```
+
+With different VAF filtering (5%, 10%, 15%, 20%, 30%)
+```{r,  fig.width=10, fig.height=4, echo=FALSE, warning=FALSE}
+plot_spectra_easy(  get_tab96( dt_mut_annot[ keep_mutation == 1 & VAF_T > 0.05 ] ), val = "Percent", add_number = T ) + labs( title = "Filtered out mutations (flags) - VAF > 5%" )
+plot_spectra_easy(  get_tab96( dt_mut_annot[ keep_mutation == 1& VAF_T > 0.10 ] ), val = "Percent", add_number = T ) + labs( title = "Filtered out mutations (flags) - VAF > 10%" )
+plot_spectra_easy(  get_tab96( dt_mut_annot[ keep_mutation == 1 & VAF_T > 0.15 ] ), val = "Percent", add_number = T ) + labs( title = "Filtered out mutations (flags) - VAF > 15%" )
+plot_spectra_easy(  get_tab96( dt_mut_annot[ keep_mutation == 1 & VAF_T > 0.20 ] ), val = "Percent", add_number = T ) + labs( title = "Filtered out mutations (flags) - VAF > 20%" )
+plot_spectra_easy(  get_tab96( dt_mut_annot[ keep_mutation == 1 & VAF_T > 0.30 ] ), val = "Percent", add_number = T ) + labs( title = "Filtered out mutations (flags) - VAF > 30%" )
+
+```
+
